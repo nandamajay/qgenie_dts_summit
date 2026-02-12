@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h2>Create New Workspace</h2>
+    <form action="/create" method="post" class="row">
+        <input type="text" name="name" placeholder="Project Name (e.g. sm8750)" required>
+        <button type="submit">Create</button>
+    </form>
+</div>
+
+<h3>Existing Projects</h3>
+{% if not projects %}
+    <div class="dim" style="text-align:center; padding:40px;">No projects created yet.</div>
+{% else %}
+    {% for p in projects %}
+    <div class="card row">
+        <div style="flex:1">
+            <div style="font-size:18px; font-weight:bold;">{{ p.name }}</div>
+            <span class="status s-{{ p.status }}">{{ p.status }}</span>
+        </div>
+        <div>
+           <a href="/project/{{ p.name }}"><button>Open</button></a>
+        </div>
+    </div>
+    {% endfor %}
+{% endif %}
+{% endblock %}

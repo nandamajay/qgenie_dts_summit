@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* Ensure graph container has height and scroll */
+    .viz-container {
+        height: 75vh;
+        overflow: auto;
+        background: #0b1220;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    /* Code block styling */
+    pre {
+        background: #0f172a;
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        overflow-x: auto;
+        font-family: monospace;
+        color: #e2e8f0;
+    }
+</style>
+
+<div class="row" style="margin-bottom:16px;">
+    <a href="/project/{{ name }}"><button class="secondary">&larr; Back to {{ name }}</button></a>
+    <h2 style="margin:0">Analysis: {{ filename }}</h2>
+</div>
+
+<div class="card">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+        <h3>Device Tree Visualization</h3>
+        <span class="dim" style="font-size:12px">Scroll to pan • Zoom browser to scale</span>
+    </div>
+    
+    <!-- GRAPH CONTAINER -->
+    <div class="viz-container">
+        <div class="mermaid">
+            {{ mermaid_code | safe }}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Source Code</h3>
+    <pre>{{ source_code }}</pre>
+</div>
+{% endblock %}
