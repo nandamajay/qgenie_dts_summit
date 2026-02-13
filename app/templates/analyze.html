@@ -15,10 +15,6 @@
   margin-bottom:10px;
 }
 .toolbar .left, .toolbar .right { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-input.search {
-  width: 360px;
-  max-width: 70vw;
-}
 pre.src {
   background: #0f172a;
   border-radius: 8px;
@@ -29,64 +25,70 @@ pre.src {
   padding: 0;
   max-height: 45vh;
 }
-.src-line {
-  display:flex;
-  gap:12px;
-  padding: 2px 10px;
-  white-space: pre;
-}
+.src-line { display:flex; gap:12px; padding: 2px 10px; white-space: pre; }
 .src-line:hover { background: rgba(148,163,184,0.08); }
-.ln {
-  width: 60px;
-  text-align: right;
-  color: #94a3b8;
-  user-select: none;
-}
-.src-line.hl {
-  background: rgba(245, 158, 11, 0.18);
-  border-left: 3px solid #f59e0b;
-}
+.ln { width: 60px; text-align: right; color: #94a3b8; user-select: none; }
 .dim-small { color:#94a3b8; font-size:12px; }
+.tabs { display:flex; gap:8px; align-items:center; }
+.tabbtn {
+  background: #111827;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.tabbtn.active { background: #2563eb; border-color: #3b82f6; }
 </style>
 
 <div class="row" style="margin-bottom:12px;">
   <a href="/project/{{ name }}"><button class="secondary">← Back to {{ name }}</button></a>
-  <h2 style="margin:0">Analysis: {{ filename }}</h2>
+  <h2 style="margin:0;">Analysis: {{ filename }}</h2>
 </div>
 
 <div class="card">
   <div class="toolbar">
     <div class="left">
-      <h3 style="margin:0">Device Tree Visualization</h3>
-      <span class="dim-small">Search nodes • Click node to jump to source • Scroll to pan</span>
+      <h3 style="margin:0;">Visualization</h3>
+      <div class="tabs">
+        <button id="tabOverview" class="tabbtn" onclick="renderView('overview')">Overview</button>
+        <button id="tabIdle" class="tabbtn" onclick="renderView('idle')"
+          {% if not has_idle %}disabled style="opacity:.5; cursor:not-allowed;"{% endif %}>
+          Power & Idle
+        </button>
+      </div>
+      <span class="dim-small" id="hintText">Overview shows major subsystems</span>
     </div>
     <div class="right">
-      <input class="search" id="nodeSearch" placeholder="Search node name/label (e.g., sound, codec, pinctrl)"/>
-      <button class="secondary" onclick="clearSearch()">Clear</button>
       <button onclick="exportMermaid()">Export Mermaid</button>
       <button onclick="exportSVG()">Export SVG</button>
     </div>
   </div>
 
   <div class="viz-container">
-    <div class="mermaid" id="mermaidBox">{{ mermaid_code | safe }}</div>
+    <div class="mermaid" id="mermaidBox">
+      {{ overview_mermaid | safe }}
+    </div>
   </div>
 </div>
 
 <div class="card">
   <h3>Source Code</h3>
-  <div class="dim-small" style="margin-bottom:8px;">
-    Click on any graph node to jump here and highlight the source block.
-  </div>
-
+  <div class="dim-small" style="margin-bottom:8px;">Source shown for reference.</div>
   <pre class="src" id="srcBox">{% for line in source_lines %}
-<div class="src-line" id="L{{ loop.index }}"><span class="ln">{{ "%4d"|format(loop.index) }}</span><span>{{ line | e }}</span></div>{% endfor %}</pre>
+<div class="src-line" id="L{{ loop.index }}"><span class="ln">{{ "%4d"|format(loop.index) }}</span><span>{{ line|e }}</span></div>{% endfor %}</pre>
 </div>
 
 <script>
-  // Preserve the original mermaid text so we can re-render highlights
-  const ORIGINAL_MERMAID = `{{ mermaid_code | replace('`','\\`') | safe }}`;
-  const NODEMAP = {{ node_map | tojson }};
+  const OVERVIEW_MERMAID = `{{ overview_mermaid | replace('`','\\`') | safe }}`;
+  const IDLE_MERMAID = `{{ idle_mermaid | default('') | replace('`','\\`') | safe }}`;
+  const HAS_IDLE = {{ 'true' if has_idle else 'false' }};
+  let CURRENT_VIEW = "overview";
+
+  function mermaidReady() {
+    return (window.mermaid && typeof window.mermaid.run === 'function');
+  }
 
   function setMermaid(text) {
     const el = document.getElementById('mermaidBox');
@@ -94,108 +96,62 @@ pre.src {
     el.classList.add('mermaid');
     el.textContent = text;
 
-    // Mermaid is loaded in base.html; run re-render
-    // mermaid.run accepts a list of nodes to render
-    mermaid.run({ nodes: [el] });
+    const tryRun = (attempt = 0) => {
+      if (!mermaidReady()) {
+        if (attempt < 80) return setTimeout(() => tryRun(attempt + 1), 50);
+        return;
+      }
+      window.mermaid.run({ nodes: [el] });
+    };
+    tryRun();
   }
 
-  function clearHighlights() {
-    document.querySelectorAll('.src-line.hl').forEach(x => x.classList.remove('hl'));
+  function setTabActive(view) {
+    document.getElementById('tabOverview')?.classList.toggle('active', view === 'overview');
+    document.getElementById('tabIdle')?.classList.toggle('active', view === 'idle');
   }
 
-  function jumpToLineRange(start, end) {
-    clearHighlights();
-    if (!start) return;
-    const s = Math.max(1, start);
-    const e = Math.max(s, end || s);
-
-    for (let i = s; i <= e; i++) {
-      const row = document.getElementById('L' + i);
-      if (row) row.classList.add('hl');
+  window.renderView = function(view) {
+    if (view === 'idle' && !HAS_IDLE) return;
+    CURRENT_VIEW = view;
+    setTabActive(view);
+    if (view === 'idle') {
+      document.getElementById('hintText').textContent = 'Power/Idle diagram';
+      setMermaid(IDLE_MERMAID);
+    } else {
+      document.getElementById('hintText').textContent = 'Overview shows major subsystems';
+      setMermaid(OVERVIEW_MERMAID);
     }
+  };
 
-    const target = document.getElementById('L' + s);
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  // Called by Mermaid click directives: `click Nxx onNodeClick "tooltip"`
-  window.onNodeClick = function(nodeId) {
-    const info = NODEMAP[nodeId];
-    if (!info) return;
-    jumpToLineRange(info.start_line, info.end_line);
-  }
-
-  // Search & highlight nodes by re-rendering Mermaid with a highlight class
-  function applySearch(term) {
-    const t = (term || '').trim().toLowerCase();
-    if (!t) {
-      setMermaid(ORIGINAL_MERMAID);
-      return;
-    }
-
-    const matches = [];
-    for (const [id, info] of Object.entries(NODEMAP)) {
-      const hay = ((info.display || '') + ' ' + (info.name || '') + ' ' + (info.label || '')).toLowerCase();
-      if (hay.includes(t)) matches.push(id);
-    }
-
-    const hl = [
-      "classDef hl fill:#f59e0b,stroke:#fbbf24,color:#0b1220,stroke-width:2px;",
-      matches.length ? `class ${matches.join(',')} hl;` : ""
-    ].join("\n");
-
-    setMermaid(ORIGINAL_MERMAID + "\n" + hl);
-  }
-
-  const searchBox = document.getElementById('nodeSearch');
-  let searchTimer = null;
-  searchBox.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => applySearch(searchBox.value), 180);
-  });
-
-  window.clearSearch = function() {
-    searchBox.value = '';
-    setMermaid(ORIGINAL_MERMAID);
-  }
-
-  // Export Mermaid source as .mmd
   window.exportMermaid = function() {
-    const blob = new Blob([ORIGINAL_MERMAID], {type: 'text/plain;charset=utf-8'});
+    const src = (CURRENT_VIEW === 'idle') ? IDLE_MERMAID : OVERVIEW_MERMAID;
+    const blob = new Blob([src], {type: 'text/plain;charset=utf-8'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `{{ filename }}.mmd`;
+    a.download = `{{ filename }}.${CURRENT_VIEW}.mmd`;
     a.click();
     URL.revokeObjectURL(a.href);
-  }
+  };
 
-  // Export rendered SVG
   window.exportSVG = function() {
     const svg = document.querySelector('.viz-container svg');
-    if (!svg) {
-      alert('SVG not ready yet. Scroll the graph once and try again.');
-      return;
-    }
+    if (!svg) { alert('SVG not ready yet. Scroll the diagram once and try again.'); return; }
     const serializer = new XMLSerializer();
     let src = serializer.serializeToString(svg);
-
-    // Ensure xmlns is present
-    if (!src.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
-      src = src.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    if (!src.match(/^<svg[^>]+xmlns=\"http:\/\/www\.w3\.org\/2000\/svg\"/)) {
+      src = src.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg">');
     }
-    if (!src.match(/^<svg[^>]+"http:\/\/www\.w3\.org\/1999\/xlink"/)) {
-      src = src.replace('<svg', '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
-    }
-
     const blob = new Blob([src], {type: 'image/svg+xml;charset=utf-8'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `{{ filename }}.svg`;
+    a.download = `{{ filename }}.${CURRENT_VIEW}.svg`;
     a.click();
     URL.revokeObjectURL(a.href);
-  }
+  };
 
-  // Initial render: base.html already initializes Mermaid; ensure highlight rerenders work.
-  // (No action needed; the initial HTML render will run automatically.)
+  // initial render
+  setTabActive(CURRENT_VIEW);
+  renderView(CURRENT_VIEW);
 </script>
 {% endblock %}
