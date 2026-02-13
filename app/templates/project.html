@@ -1,38 +1,407 @@
 {% extends "base.html" %}
-
 {% block content %}
+
 <div class="row" style="margin-bottom:16px;">
-    <a href="/"><button class="secondary">&larr; Dashboard</button></a>
-    <h2>{{ name }}</h2>
+  <a href="/"><button class="secondary">← Dashboard</button></a>
+  <h2 style="margin:0;">{{ name }}</h2>
+  <div style="flex:1"></div>
+  <a href="/diff/{{ name }}"><button class="secondary">Diff DTSI</button></a>
 </div>
 
 <div class="card">
-    <div class="row" style="justify-content:space-between">
-        <h3>Source Repository</h3>
-        <form action="/clone/{{ name }}" method="post">
-            <button type="submit" {% if state.status == 'cloning' %}disabled{% endif %}>
-                {% if state.status == 'cloning' %}Syncing... {{ state.percent }}%{% else %}Sync Files (Sparse){% endif %}
-            </button>
-        </form>
+  <div class="row" style="justify-content:space-between; flex-wrap:wrap;">
+    <div class="row" style="gap:10px; flex-wrap:wrap;">
+      <h3 style="margin:0;">Source Repository</h3>
+      <span id="statusBadge" class="status s-{{ state.status }}">{{ state.status }}</span>
+      <span class="pill dim" id="fileCountPill" style="display:none;"></span>
     </div>
-    <div style="background:#000; padding:10px; font-family:monospace; font-size:12px; height:80px; overflow-y:auto; color:#a5b4fc; margin-top:16px; border-radius:6px;">
-        {{ state.log or 'Log waiting...' }}
+
+    <form action="/clone/{{ name }}" method="post">
+      <button id="syncBtn" type="submit" {% if state.status == 'cloning' %}disabled{% endif %}>
+        {% if state.status == 'cloning' %}Syncing... {{ state.percent }}%{% else %}Sync Files (Sparse){% endif %}
+      </button>
+    </form>
+  </div>
+
+  <div id="progressWrap" style="margin-top:12px; display:none;">
+    <div class="row" style="justify-content:space-between;">
+      <div class="dim">Progress</div>
+      <div class="dim" id="progressPct">0%</div>
     </div>
+    <div class="bar">
+      <div class="barFill" id="barFill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div id="logBox" class="logbox">{{ state.log or 'Log waiting...' }}</div>
 </div>
 
 <div class="card">
-    <h3>Device Tree Files (DTSI)</h3>
-    {% if files %}
-        <ul style="columns: 2; list-style: none; padding: 0;">
-        {% for f in files %}
-            <li style="margin-bottom:6px;">
-                <span style="font-family:monospace; color:#cbd5e1;">{{ f }}</span>
-                <a href="/analyze/{{ name }}/{{ f }}" style="float:right; color:#38bdf8; font-weight:bold; font-size:13px;">Analyze &rarr;</a>
-            </li>
-        {% endfor %}
-        </ul>
-    {% else %}
-        <div class="dim">No files found. Please sync the repository.</div>
-    {% endif %}
+  <div class="toolbar">
+    <div class="left">
+      <h3 style="margin:0;">Device Tree Files (DTSI)</h3>
+      <span class="dim" id="visibleCount"></span>
+    </div>
+    <div class="right">
+      <input id="fileSearch" class="search" placeholder="Filter DTSI (e.g., sm8750, audio, codec)">
+      <button class="secondary" type="button" onclick="clearFileSearch()">Clear</button>
+    </div>
+  </div>
+
+  {% if files %}
+    <div class="hint dim">
+      Tip: click a row to preview. Use A/B to select two files and compare instantly.
+    </div>
+
+    <ul class="fileGrid" id="fileGrid">
+      {% for f in files %}
+        <li class="fileRow fileItem"
+            data-name="{{ f|lower }}"
+            data-file="{{ f }}"
+            onclick="openPreview('{{ f }}')">
+          <div class="row" style="gap:10px; min-width:0;">
+            <span class="mono">{{ f }}</span>
+            <span class="dim" style="font-size:12px;">(click to preview)</span>
+          </div>
+
+          <div class="row actions" onclick="event.stopPropagation();">
+            <label class="ab">
+              <input type="radio" name="pickA" onchange="setPick('a','{{ f }}')"> A
+            </label>
+            <label class="ab">
+              <input type="radio" name="pickB" onchange="setPick('b','{{ f }}')"> B
+            </label>
+
+            <a href="/analyze/{{ name }}/{{ f }}">
+              <button class="secondary" type="button">Analyze</button>
+            </a>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+
+  {% else %}
+    <div class="dim">No files found. Please sync the repository.</div>
+  {% endif %}
 </div>
+
+<!-- Sticky Compare Bar -->
+<div id="compareBar" class="compareBar" style="display:none;">
+  <div class="row" style="gap:12px; align-items:center; flex-wrap:wrap;">
+    <div class="pill">A: <b id="pickA">—</b></div>
+    <div class="pill">B: <b id="pickB">—</b></div>
+    <button id="compareBtn" onclick="goCompare()" disabled>Compare</button>
+    <button class="secondary" onclick="clearPicks()">Clear</button>
+  </div>
+</div>
+
+<!-- Preview Drawer -->
+<div id="drawerBackdrop" class="drawerBackdrop" onclick="closePreview()" style="display:none;"></div>
+<div id="drawer" class="drawer" style="display:none;">
+  <div class="drawerHead">
+    <div>
+      <div class="dim" style="font-size:12px;">Preview</div>
+      <div id="drawerTitle" style="font-weight:bold; font-size:16px;">—</div>
+      <div class="dim" id="drawerMeta" style="font-size:12px; margin-top:4px;"></div>
+    </div>
+    <div class="row" style="flex-wrap:wrap;">
+      <a id="drawerAnalyzeLink" href="#"><button>Analyze</button></a>
+      <button class="secondary" onclick="closePreview()">Close</button>
+    </div>
+  </div>
+  <pre id="drawerBody" class="drawerBody">Loading…</pre>
+</div>
+
+<style>
+  .pill {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    padding: 6px 10px;
+  }
+
+  .toolbar {
+    display:flex; gap:10px; flex-wrap:wrap;
+    align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .toolbar .left, .toolbar .right {
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  }
+  input.search { width: 420px; max-width: 75vw; }
+
+  .hint { margin-bottom: 10px; font-size: 13px; }
+
+  .fileGrid {
+    list-style:none; padding:0; margin:0;
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:10px;
+  }
+  @media (max-width: 980px) {
+    .fileGrid { grid-template-columns: 1fr; }
+  }
+
+  .fileRow {
+    background:#0f172a;
+    border:1px solid #334155;
+    border-radius:10px;
+    padding:10px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    cursor:pointer;
+  }
+  .fileRow:hover {
+    border-color:#475569;
+    background:#0b1220;
+  }
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color:#cbd5e1;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* Actions area: prevent stretching */
+  .actions { flex-shrink: 0; }
+
+  /* A/B chip */
+  .ab {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:#111827;
+    border:1px solid #334155;
+    padding:5px 8px;
+    border-radius:999px;
+    font-size:12px;
+    user-select:none;
+    line-height: 1;
+  }
+
+  /* CRITICAL: lock radios to natural size even if other CSS exists */
+  .ab input[type="radio"] {
+    width: 14px !important;
+    height: 14px !important;
+    margin: 0;
+    padding: 0;
+    accent-color: #38bdf8;
+  }
+
+  .compareBar {
+    position: sticky;
+    bottom: 0;
+    margin-top: 14px;
+    background: rgba(15,23,42,0.92);
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 12px 14px;
+    backdrop-filter: blur(10px);
+  }
+
+  .logbox {
+    background:#000;
+    padding:10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size:12px;
+    height:90px;
+    overflow-y:auto;
+    color:#a5b4fc;
+    margin-top:16px;
+    border-radius:6px;
+    border:1px solid #111827;
+    white-space: pre-wrap;
+  }
+
+  .bar { height:10px; background:#0b1220; border:1px solid #334155; border-radius:999px; overflow:hidden; }
+  .barFill { height:100%; background:#2563eb; }
+
+  /* Drawer */
+  .drawerBackdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 40;
+  }
+  .drawer {
+    position: fixed;
+    top: 0; right: 0;
+    height: 100%;
+    width: min(720px, 92vw);
+    background: #0f172a;
+    border-left: 1px solid #334155;
+    z-index: 50;
+    display:flex;
+    flex-direction: column;
+  }
+  .drawerHead {
+    padding: 14px;
+    border-bottom: 1px solid #334155;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap: 12px;
+  }
+  .drawerBody {
+    margin: 0;
+    padding: 14px;
+    overflow:auto;
+    flex: 1;
+    background: #0b1220;
+    color: #e2e8f0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    white-space: pre;
+  }
+</style>
+
+<script>
+  // -------------------------
+  // Live Sync Polling
+  // -------------------------
+  async function pollState() {
+    try {
+      const res = await fetch(`/state/{{ name }}`);
+      if (!res.ok) return;
+      const st = await res.json();
+
+      const btn = document.getElementById("syncBtn");
+      const badge = document.getElementById("statusBadge");
+      const logBox = document.getElementById("logBox");
+      const progressWrap = document.getElementById("progressWrap");
+      const barFill = document.getElementById("barFill");
+      const progressPct = document.getElementById("progressPct");
+
+      if (badge) {
+        badge.className = `status s-${st.status || "idle"}`;
+        badge.textContent = st.status || "idle";
+      }
+
+      if (st.status === "cloning") {
+        const pct = Number(st.percent || 0);
+        if (btn) { btn.disabled = true; btn.textContent = `Syncing... ${pct}%`; }
+        if (logBox) logBox.textContent = st.log || "Syncing...";
+        if (progressWrap) progressWrap.style.display = "";
+        if (barFill) barFill.style.width = `${pct}%`;
+        if (progressPct) progressPct.textContent = `${pct}%`;
+        setTimeout(pollState, 800);
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = "Sync Files (Sparse)"; }
+        if (logBox && st.log) logBox.textContent = st.log;
+        if (progressWrap) progressWrap.style.display = "none";
+      }
+    } catch (e) {}
+  }
+  pollState();
+
+  // -------------------------
+  // File Search Filter
+  // -------------------------
+  const allItems = Array.from(document.querySelectorAll(".fileItem"));
+  const searchBox = document.getElementById("fileSearch");
+  const visibleCount = document.getElementById("visibleCount");
+  const fileCountPill = document.getElementById("fileCountPill");
+
+  function updateCounts() {
+    const visible = allItems.filter(x => x.style.display !== "none").length;
+    if (visibleCount) visibleCount.textContent = `${visible} shown`;
+    if (fileCountPill) {
+      fileCountPill.style.display = "";
+      fileCountPill.textContent = `${allItems.length} total`;
+    }
+  }
+
+  function applyFilter(q) {
+    const term = (q || "").trim().toLowerCase();
+    allItems.forEach(li => {
+      const name = li.dataset.name || "";
+      li.style.display = name.includes(term) ? "" : "none";
+    });
+    updateCounts();
+  }
+
+  searchBox?.addEventListener("input", () => applyFilter(searchBox.value));
+
+  function clearFileSearch() {
+    if (searchBox) searchBox.value = "";
+    applyFilter("");
+  }
+  updateCounts();
+
+  // -------------------------
+  // A/B Picks + Sticky Compare
+  // -------------------------
+  let pickA = "";
+  let pickB = "";
+
+  function setPick(which, file) {
+    if (which === "a") pickA = file;
+    if (which === "b") pickB = file;
+
+    document.getElementById("pickA").textContent = pickA || "—";
+    document.getElementById("pickB").textContent = pickB || "—";
+
+    const bar = document.getElementById("compareBar");
+    const btn = document.getElementById("compareBtn");
+    if (bar) bar.style.display = (pickA || pickB) ? "" : "none";
+    if (btn) btn.disabled = !(pickA && pickB);
+  }
+
+  function clearPicks() {
+    pickA = ""; pickB = "";
+    document.getElementById("pickA").textContent = "—";
+    document.getElementById("pickB").textContent = "—";
+    document.getElementById("compareBar").style.display = "none";
+    document.getElementById("compareBtn").disabled = true;
+
+    document.querySelectorAll('input[name="pickA"]').forEach(i => i.checked = false);
+    document.querySelectorAll('input[name="pickB"]').forEach(i => i.checked = false);
+  }
+
+  function goCompare() {
+    if (!(pickA && pickB)) return;
+    const url = `/diff/{{ name }}?a=${encodeURIComponent(pickA)}&b=${encodeURIComponent(pickB)}`;
+    window.location.href = url;
+  }
+
+  // -------------------------
+  // Preview Drawer
+  // -------------------------
+  async function openPreview(file) {
+    const drawer = document.getElementById("drawer");
+    const backdrop = document.getElementById("drawerBackdrop");
+    const title = document.getElementById("drawerTitle");
+    const meta = document.getElementById("drawerMeta");
+    const body = document.getElementById("drawerBody");
+    const link = document.getElementById("drawerAnalyzeLink");
+
+    if (drawer) drawer.style.display = "";
+    if (backdrop) backdrop.style.display = "";
+    if (title) title.textContent = file;
+    if (meta) meta.textContent = "Loading…";
+    if (body) body.textContent = "Loading…";
+    if (link) link.href = `/analyze/{{ name }}/${encodeURIComponent(file)}`;
+
+    try {
+      const res = await fetch(`/preview/{{ name }}/${encodeURIComponent(file)}`);
+      if (!res.ok) throw new Error("preview failed");
+      const data = await res.json();
+      if (meta) meta.textContent = `${data.total_lines} lines • showing first 220`;
+      if (body) body.textContent = data.head || "";
+    } catch (e) {
+      if (meta) meta.textContent = "Failed to load preview";
+      if (body) body.textContent = "";
+    }
+  }
+
+  function closePreview() {
+    const drawer = document.getElementById("drawer");
+    const backdrop = document.getElementById("drawerBackdrop");
+    if (drawer) drawer.style.display = "none";
+    if (backdrop) backdrop.style.display = "none";
+  }
+</script>
+
 {% endblock %}
+``

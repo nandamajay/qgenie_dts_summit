@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row" style="margin-bottom:16px;">
+  <a href="/project/{{ name }}"><button class="secondary">← Back to {{ name }}</button></a>
+  <h2 style="margin:0">Diff: DTSI Regression View</h2>
+</div>
+
+<div class="card">
+  <form method="get" action="/diff/{{ name }}" class="row" style="flex-wrap:wrap;">
+    <div>
+      <div class="dim" style="font-size:12px;margin-bottom:6px;">File A</div>
+      <select name="a" style="min-width:360px;">
+        <option value="">-- select --</option>
+        {% for f in files %}
+          <option value="{{ f }}" {% if f==a %}selected{% endif %}>{{ f }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <div class="dim" style="font-size:12px;margin-bottom:6px;">File B</div>
+      <select name="b" style="min-width:360px;">
+        <option value="">-- select --</option>
+        {% for f in files %}
+          <option value="{{ f }}" {% if f==b %}selected{% endif %}>{{ f }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="align-self:end;">
+      <button type="submit">Compare</button>
+    </div>
+  </form>
+</div>
+
+{% if summary %}
+<div class="card">
+  <h3>Summary</h3>
+  <div class="row">
+    <div class="pill">+ Added lines: <b>{{ summary.added }}</b></div>
+    <div class="pill">- Removed lines: <b>{{ summary.removed }}</b></div>
+  </div>
+
+  {% if tree_delta %}
+  <div style="margin-top:14px;">
+    <h4 style="margin-bottom:8px;">Structural changes (node paths)</h4>
+    <div class="row" style="align-items:flex-start; gap:16px;">
+      <div style="flex:1;">
+        <div class="dim" style="margin-bottom:6px;">Added nodes</div>
+        <pre style="max-height:240px; overflow:auto;">{% for x in tree_delta.added_nodes %}{{ x }}
+{% endfor %}</pre>
+      </div>
+      <div style="flex:1;">
+        <div class="dim" style="margin-bottom:6px;">Removed nodes</div>
+        <pre style="max-height:240px; overflow:auto;">{% for x in tree_delta.removed_nodes %}{{ x }}
+{% endfor %}</pre>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if diff_html %}
+<div class="card">
+  <h3>Context diff</h3>
+  <div style="overflow:auto; max-height:70vh; border:1px solid #334155; border-radius:8px;">
+    {{ diff_html | safe }}
+  </div>
+</div>
+{% else %}
+<div class="dim" style="text-align:center; padding:20px;">Select two files to compare.</div>
+{% endif %}
+
+<style>
+select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.pill {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+table.diff { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.diff td { padding: 2px 6px; }
+.diff_header { background: #111827; color: #93c5fd; position: sticky; top: 0; }
+.diff_add { background: rgba(16, 185, 129, 0.15); }
+.diff_chg { background: rgba(245, 158, 11, 0.15); }
+.diff_sub { background: rgba(239, 68, 68, 0.15); }
+</style>
+{% endblock %}

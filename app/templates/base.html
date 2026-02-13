@@ -1,37 +1,108 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8"/>
-    <title>QGenie Audio Architect</title>
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding-bottom: 40px; }
-        .wrap { max-width: 1400px; margin: 24px auto; padding: 0 20px; }
-        .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        h1, h2, h3 { margin-top: 0; color: #f8fafc; }
-        a { text-decoration: none; color: inherit; }
-        input, button { font-size: 14px; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; }
-        input { background: #0f172a; color: #fff; width: 300px; }
-        button { background: #2563eb; color: #fff; cursor: pointer; border: none; transition: background 0.2s; }
-        button:hover { background: #1d4ed8; }
-        button.secondary { background: #475569; }
-        .row { display: flex; gap: 12px; align-items: center; }
-        .dim { color: #94a3b8; }
-        .status { font-weight: bold; text-transform: uppercase; font-size: 12px; padding: 2px 8px; border-radius: 4px; }
-        .s-ready { background: #059669; color: #fff; }
-        .s-cloning { background: #d97706; color: #fff; }
-        .s-idle { background: #475569; color: #fff; }
-    </style>
+  <meta charset="utf-8"/>
+  <title>QGenie Audio Architect</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding-bottom: 40px;
+    }
+    .wrap { max-width: 1400px; margin: 24px auto; padding: 0 20px; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    h1, h2, h3 { margin-top: 0; color: #f8fafc; }
+    a { text-decoration: none; color: inherit; }
+
+    /* Keep consistent sizing */
+    input, button, select, textarea {
+      font-size: 14px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      box-sizing: border-box;
+    }
+
+    /* Background colors for text-like controls */
+    input, select, textarea { background: #0f172a; color: #fff; }
+
+    /* IMPORTANT: Apply width ONLY to text-like inputs (NOT radio/checkbox) */
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="url"],
+    input[type="number"],
+    input[type="tel"] {
+      width: 300px;
+    }
+
+    /* Radios/checkboxes should be natural size */
+    input[type="radio"],
+    input[type="checkbox"] {
+      width: auto !important;
+      padding: 0;
+      border: none;
+    }
+
+    button {
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    button:hover { background: #1d4ed8; }
+    button.secondary { background: #475569; }
+    button.secondary:hover { background: #334155; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .row { display: flex; gap: 12px; align-items: center; }
+    .dim { color: #94a3b8; }
+
+    .status {
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .s-ready { background: #059669; color: #fff; }
+    .s-cloning { background: #d97706; color: #fff; }
+    .s-idle { background: #475569; color: #fff; }
+    .s-error { background: #dc2626; color: #fff; }
+
+    .pill {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+  </style>
 </head>
+
 <body>
-    <div class="wrap">
-        <div style="margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:15px; display:flex; justify-content:space-between;">
-            <a href="/" style="font-size:22px; font-weight:bold; color:#38bdf8;">⚡ QGenie Audio Architect</a>
-        </div>
-        {% block content %}{% endblock %}
+  <div class="wrap">
+    <div style="margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:15px; display:flex; justify-content:space-between;">
+      <a href="/" style="font-size:22px; font-weight:bold; color:#38bdf8;">⚡ QGenie Audio Architect</a>
     </div>
-    <script type="module">
-      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose' });
-    </script>
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose' });
+  </script>
 </body>
 </html>
